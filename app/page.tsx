@@ -222,34 +222,19 @@ Il peso finale può variare leggermente in base al taglio reale.
             Puoi ritirare in sede in Via Roma 15 a Castellanza oppure concordare
             la consegna nel luogo e nell’orario più comodi per te.
           </p>
-
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            <InfoCard
-              title="Ordini su misura"
-              text="Scegli tagli, quantità, grammature e preferenze di preparazione."
-            />
-            <InfoCard
-              title="Ritiro o consegna"
-              text="Ritira in sede o concorda la consegna secondo le tue esigenze."
-            />
-            <InfoCard
-              title="Box selezionati"
-              text="Soluzioni pensate per fitness, famiglia e grigliate."
-            />
-          </div>
         </div>
       </section>
 
-      <section id="catalogo" className="px-6 py-20">
+      <section id="catalogo" className="px-4 py-16">
         <div className="mx-auto max-w-6xl">
           <h2 className="text-center text-3xl font-bold">Catalogo prodotti</h2>
 
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
+          <div className="mt-8 flex flex-wrap justify-center gap-2">
             {categories.map((category) => (
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`rounded-full px-5 py-3 text-sm font-bold uppercase ${
+                className={`rounded-full px-4 py-2 text-xs font-bold uppercase ${
                   selectedCategory === category
                     ? "bg-red-700 text-white"
                     : "bg-white/10 text-white hover:bg-white/20"
@@ -260,7 +245,7 @@ Il peso finale può variare leggermente in base al taglio reale.
             ))}
           </div>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-6">
             {filteredProducts.map((product) => (
               <ProductCard
                 key={product.name}
@@ -331,42 +316,23 @@ Il peso finale può variare leggermente in base al taglio reale.
               className="min-h-32 rounded-2xl border p-4"
             />
 
-            <div className="rounded-3xl bg-neutral-100 p-5 text-sm leading-6 text-neutral-700">
-              <h3 className="font-bold text-neutral-950">Informativa allergeni</h3>
-              <p className="mt-2">
-                Alcuni prodotti possono contenere o venire a contatto con allergeni
-                durante la preparazione. In caso di allergie o intolleranze, indicarlo
-                sempre nelle note dell’ordine e attendere conferma prima del ritiro o
-                della consegna.
-              </p>
+            <label className="flex gap-3 rounded-2xl bg-neutral-100 p-4 text-sm">
+              <input
+                type="checkbox"
+                checked={allergensAccepted}
+                onChange={(e) => setAllergensAccepted(e.target.checked)}
+              />
+              <span>Ho letto l’informativa allergeni.</span>
+            </label>
 
-              <label className="mt-4 flex gap-3">
-                <input
-                  type="checkbox"
-                  checked={allergensAccepted}
-                  onChange={(e) => setAllergensAccepted(e.target.checked)}
-                />
-                <span>Ho letto l’informativa allergeni.</span>
-              </label>
-            </div>
-
-            <div className="rounded-3xl bg-neutral-100 p-5 text-sm leading-6 text-neutral-700">
-              <h3 className="font-bold text-neutral-950">Informativa privacy</h3>
-              <p className="mt-2">
-                I dati inseriti vengono utilizzati esclusivamente per gestire la
-                richiesta d’ordine, il contatto con il cliente, il ritiro o la consegna.
-                I dati non vengono ceduti a terzi per finalità di marketing.
-              </p>
-
-              <label className="mt-4 flex gap-3">
-                <input
-                  type="checkbox"
-                  checked={privacyAccepted}
-                  onChange={(e) => setPrivacyAccepted(e.target.checked)}
-                />
-                <span>Ho letto e accetto l’informativa privacy.</span>
-              </label>
-            </div>
+            <label className="flex gap-3 rounded-2xl bg-neutral-100 p-4 text-sm">
+              <input
+                type="checkbox"
+                checked={privacyAccepted}
+                onChange={(e) => setPrivacyAccepted(e.target.checked)}
+              />
+              <span>Ho letto e accetto l’informativa privacy.</span>
+            </label>
 
             <button
               onClick={sendOrder}
@@ -400,9 +366,6 @@ Il peso finale può variare leggermente in base al taglio reale.
               <h3 className="text-xl font-bold">Orari</h3>
               <p className="mt-4 text-neutral-300">Dal lunedì al sabato</p>
               <p className="mt-2 text-neutral-300">08:30 - 19:30</p>
-              <p className="mt-4 text-neutral-400">
-                Ritiro in sede o consegna concordata in base alla disponibilità.
-              </p>
             </div>
           </div>
         </div>
@@ -415,15 +378,6 @@ Il peso finale può variare leggermente in base al taglio reale.
   );
 }
 
-function InfoCard({ title, text }: { title: string; text: string }) {
-  return (
-    <div className="rounded-3xl bg-neutral-100 p-6">
-      <h3 className="text-xl font-bold">{title}</h3>
-      <p className="mt-3 text-neutral-600">{text}</p>
-    </div>
-  );
-}
-
 function ProductCard({
   product,
   onAdd,
@@ -432,10 +386,25 @@ function ProductCard({
   onAdd: (item: CartItem) => void;
 }) {
   const [quantity, setQuantity] = useState(product.fixedQuantity || "500 g");
+  const [added, setAdded] = useState(false);
+
+  function handleAdd() {
+    onAdd({
+      name: product.name,
+      quantity,
+      price: product.price,
+    });
+
+    setAdded(true);
+
+    setTimeout(() => {
+      setAdded(false);
+    }, 1500);
+  }
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/5">
-      <div className="flex h-56 items-center justify-center bg-neutral-900 p-4">
+    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
+      <div className="flex h-36 items-center justify-center bg-neutral-900 p-2 md:h-56 md:p-4">
         <img
           src={product.image}
           alt={product.name}
@@ -443,28 +412,28 @@ function ProductCard({
         />
       </div>
 
-      <div className="p-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-red-400">
+      <div className="p-3 md:p-6">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-red-400 md:text-xs">
           {product.category}
         </p>
 
-        <h3 className="mt-2 text-2xl font-bold">{product.name}</h3>
-        <p className="mt-2 text-red-400">{product.price}</p>
+        <h3 className="mt-2 text-base font-bold md:text-2xl">{product.name}</h3>
+        <p className="mt-1 text-sm text-red-400 md:text-base">{product.price}</p>
 
-        <p className="mt-4 text-neutral-400">
+        <p className="mt-3 hidden text-neutral-400 md:block">
           {product.description ||
             "Seleziona la quantità desiderata. Il peso finale può variare leggermente."}
         </p>
 
         {product.fixedQuantity ? (
-          <div className="mt-6 rounded-2xl border border-white/20 bg-neutral-900 p-4 text-white">
+          <div className="mt-4 rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white">
             {product.fixedQuantity}
           </div>
         ) : (
           <select
             value={quantity}
             onChange={(e) => setQuantity(e.target.value)}
-            className="mt-6 w-full rounded-2xl border border-white/20 bg-neutral-900 p-4 text-white"
+            className="mt-4 w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white"
           >
             <option>250 g</option>
             <option>500 g</option>
@@ -476,16 +445,14 @@ function ProductCard({
         )}
 
         <button
-          onClick={() =>
-            onAdd({
-              name: product.name,
-              quantity,
-              price: product.price,
-            })
-          }
-          className="mt-6 w-full rounded-full bg-red-700 px-5 py-3 text-sm font-bold uppercase hover:bg-red-800"
+          onClick={handleAdd}
+          className={`mt-4 w-full rounded-full px-3 py-3 text-xs font-bold uppercase transition md:text-sm ${
+            added
+              ? "bg-green-600 text-white"
+              : "bg-red-700 text-white hover:bg-red-800"
+          }`}
         >
-          Aggiungi al carrello
+          {added ? "Aggiunto ✓" : "Aggiungi"}
         </button>
       </div>
     </div>
