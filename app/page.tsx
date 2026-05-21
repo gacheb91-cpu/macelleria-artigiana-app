@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 const WHATSAPP_NUMBER = "393513912335";
 const BOX_CATEGORY = "Box Selezione Macelleria Artigiana";
@@ -40,32 +40,36 @@ const products = [
     name: "Box Fitness Base",
     price: "€35",
     image: "/images/box-fitness-base.jpg",
-    description: "Petto di pollo 1 kg, macinato magro 500 g, tacchino 500 g.",
     fixedQuantity: "1 box",
+    description: "Una selezione semplice e pratica per chi vuole organizzare pasti proteici durante la settimana.",
+    items: ["Petto di pollo 1 kg", "Macinato magro 500 g", "Tacchino 500 g"],
   },
   {
     category: BOX_CATEGORY,
     name: "Box Fitness Plus",
     price: "€55",
     image: "/images/box-fitness-plus.jpg",
-    description: "Petto di pollo 1,5 kg, macinato magro 1 kg, hamburger magri x5, tacchino 1 kg.",
     fixedQuantity: "1 box",
+    description: "Pensato per chi cerca più varietà e una scorta completa di proteine magre.",
+    items: ["Petto di pollo 1,5 kg", "Macinato magro 1 kg", "Hamburger magri x5", "Tacchino 1 kg"],
   },
   {
     category: BOX_CATEGORY,
     name: "Box Famiglia",
     price: "€75",
     image: "/images/box-famiglia.jpg",
-    description: "Arrosto 1 kg, spezzatino 1 kg, fettine bovino 1 kg, petto pollo 1 kg, salsiccia 500 g.",
     fixedQuantity: "1 box",
+    description: "Una soluzione comoda e completa per organizzare diversi pasti in famiglia.",
+    items: ["Arrosto 1 kg", "Spezzatino 1 kg", "Fettine bovino 1 kg", "Petto pollo 1 kg", "Salsiccia 500 g"],
   },
   {
     category: BOX_CATEGORY,
     name: "Box Grigliata x4",
     price: "Prezzo da confermare",
     image: "/images/box-grigliata.jpg",
-    description: "Costine, salsiccia fresca, salamelle, spiedini misti e tagliata di manzo.",
     fixedQuantity: "1 box",
+    description: "Una selezione pensata per una grigliata ricca, pratica e pronta da condividere.",
+    items: ["Costine", "Salsiccia fresca", "Salamelle", "Spiedini misti", "Tagliata di manzo"],
   },
 ];
 
@@ -86,6 +90,7 @@ type Product = {
   image: string;
   description?: string;
   fixedQuantity?: string;
+  items?: string[];
 };
 
 type CartItem = {
@@ -105,6 +110,22 @@ export default function Home() {
   const [notes, setNotes] = useState("");
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [allergensAccepted, setAllergensAccepted] = useState(false);
+  const [installPrompt, setInstallPrompt] = useState<any>(null);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setInstallPrompt(e);
+      setShowInstallBanner(true);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+    };
+  }, []);
 
   const filteredProducts =
     selectedCategory === "Tutti"
@@ -117,6 +138,17 @@ export default function Home() {
 
   function removeFromCart(indexToRemove: number) {
     setCart(cart.filter((_, index) => index !== indexToRemove));
+  }
+
+  async function handleInstall() {
+    if (!installPrompt) return;
+
+    installPrompt.prompt();
+    const result = await installPrompt.userChoice;
+
+    if (result.outcome === "accepted") {
+      setShowInstallBanner(false);
+    }
   }
 
   function sendOrder() {
@@ -156,6 +188,38 @@ Il peso finale può variare leggermente in base al taglio reale.
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
+      {showInstallBanner && (
+        <div className="fixed bottom-4 left-4 right-4 z-50 rounded-3xl border border-white/10 bg-black/95 p-5 shadow-2xl backdrop-blur">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-sm font-bold text-white">
+                Installa Macelleria Artigiana
+              </p>
+
+              <p className="mt-1 text-xs text-neutral-400">
+                Aggiungi l’app alla schermata Home per un accesso più veloce.
+              </p>
+            </div>
+
+            <div className="flex shrink-0 gap-2">
+              <button
+                onClick={() => setShowInstallBanner(false)}
+                className="rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white"
+              >
+                Più tardi
+              </button>
+
+              <button
+                onClick={handleInstall}
+                className="rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white"
+              >
+                Installa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <section className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
         <img
           src="/images/logo.png"
@@ -420,10 +484,25 @@ function ProductCard({
         <h3 className="mt-2 text-base font-bold md:text-2xl">{product.name}</h3>
         <p className="mt-1 text-sm text-red-400 md:text-base">{product.price}</p>
 
-        <p className="mt-3 hidden text-neutral-400 md:block">
-          {product.description ||
-            "Seleziona la quantità desiderata. Il peso finale può variare leggermente."}
-        </p>
+        {product.description && (
+          <p className="mt-3 text-xs leading-5 text-neutral-400 md:text-sm">
+            {product.description}
+          </p>
+        )}
+
+        {product.items && (
+          <ul className="mt-3 space-y-1 text-xs leading-5 text-neutral-300 md:text-sm">
+            {product.items.map((item) => (
+              <li key={item}>• {item}</li>
+            ))}
+          </ul>
+        )}
+
+        {!product.description && !product.items && (
+          <p className="mt-3 hidden text-neutral-400 md:block">
+            Seleziona la quantità desiderata. Il peso finale può variare leggermente.
+          </p>
+        )}
 
         {product.fixedQuantity ? (
           <div className="mt-4 rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white">
