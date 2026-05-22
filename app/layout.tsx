@@ -12,9 +12,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata = {
+export const metadata: Metadata = {
   title: "Macelleria Artigiana",
   description: "Tradizione, nutrizione e innovazione su misura.",
+  manifest: "/manifest.json",
+
+  icons: {
+    apple: "/icon-192.png",
+    icon: "/icon-192.png",
+  },
+
+  themeColor: "#000000",
 };
 
 export default function RootLayout({
@@ -24,10 +32,12 @@ export default function RootLayout({
 }>) {
   return (
     <html
-      lang="en"
+      lang="it"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        {children}
+      </body>
     </html>
   );
 }
