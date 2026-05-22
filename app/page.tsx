@@ -112,12 +112,32 @@ export default function Home() {
   const [allergensAccepted, setAllergensAccepted] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [isIosInstall, setIsIosInstall] = useState(false);
 
   useEffect(() => {
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone === true;
+
+    const dismissed =
+      window.localStorage.getItem("macelleria-install-banner-dismissed") === "true";
+
+    const isIos =
+      /iphone|ipad|ipod/i.test(window.navigator.userAgent) &&
+      !(window.navigator as any).standalone;
+
+    if (!isStandalone && !dismissed && isIos) {
+      setIsIosInstall(true);
+      setShowInstallBanner(true);
+    }
+
     const handler = (e: any) => {
       e.preventDefault();
-      setInstallPrompt(e);
-      setShowInstallBanner(true);
+
+      if (!dismissed && !isStandalone) {
+        setInstallPrompt(e);
+        setShowInstallBanner(true);
+      }
     };
 
     window.addEventListener("beforeinstallprompt", handler);
@@ -140,7 +160,19 @@ export default function Home() {
     setCart(cart.filter((_, index) => index !== indexToRemove));
   }
 
+  function closeInstallBanner() {
+    window.localStorage.setItem("macelleria-install-banner-dismissed", "true");
+    setShowInstallBanner(false);
+  }
+
   async function handleInstall() {
+    if (isIosInstall) {
+      alert(
+        "Su iPhone: premi il pulsante Condividi di Safari e scegli 'Aggiungi alla schermata Home'."
+      );
+      return;
+    }
+
     if (!installPrompt) return;
 
     installPrompt.prompt();
@@ -148,6 +180,7 @@ export default function Home() {
 
     if (result.outcome === "accepted") {
       setShowInstallBanner(false);
+      window.localStorage.setItem("macelleria-install-banner-dismissed", "true");
     }
   }
 
@@ -197,13 +230,15 @@ Il peso finale può variare leggermente in base al taglio reale.
               </p>
 
               <p className="mt-1 text-xs text-neutral-400">
-                Aggiungi l’app alla schermata Home per un accesso più veloce.
+                {isIosInstall
+                  ? "Su iPhone puoi aggiungerla alla schermata Home da Safari."
+                  : "Aggiungi l’app alla schermata Home per un accesso più veloce."}
               </p>
             </div>
 
             <div className="flex shrink-0 gap-2">
               <button
-                onClick={() => setShowInstallBanner(false)}
+                onClick={closeInstallBanner}
                 className="rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white"
               >
                 Più tardi
@@ -213,7 +248,7 @@ Il peso finale può variare leggermente in base al taglio reale.
                 onClick={handleInstall}
                 className="rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white"
               >
-                Installa
+                {isIosInstall ? "Come fare" : "Installa"}
               </button>
             </div>
           </div>
@@ -537,4 +572,3 @@ function ProductCard({
     </div>
   );
 }
-// aggiornamento homepage
