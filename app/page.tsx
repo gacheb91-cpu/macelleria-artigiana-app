@@ -21,6 +21,7 @@ const products = [
   { category: "Manzo / Vitello", name: "Costate con osso", price: "€27,90/kg", image: "/images/costata.jpg" },
   { category: "Manzo / Vitello", name: "Arrosto di vitello", price: "€19,90/kg", image: "/images/arrosto-vitello.jpg" },
   { category: "Manzo / Vitello", name: "Spezzatino di vitello", price: "€16,90/kg", image: "/images/spezzatino-vitello.jpg" },
+  { category: "Manzo / Vitello", name: "Tagliata di manzo", price: "€22,90/kg", image: "/images/tagliata.png" },
 
   { category: "Suino", name: "Salsiccia fresca", price: "€12,90/kg", image: "/images/salsiccia.jpg" },
   { category: "Suino", name: "Salamelle fresche", price: "€12,90/kg", image: "/images/salamelle.jpg" },
@@ -28,6 +29,9 @@ const products = [
   { category: "Suino", name: "Lonza", price: "€10,90/kg", image: "/images/lonza.jpg" },
   { category: "Suino", name: "Braciole di coppa", price: "€9,90/kg", image: "/images/braciole.jpg" },
   { category: "Suino", name: "Cotolette di suino", price: "€9,90/kg", image: "/images/cotolette-suino.jpg" },
+  { category: "Suino", name: "Spiedini misti", price: "€14,90/kg", image: "/images/spiedini.png" },
+
+  { category: "Ovino", name: "Arrosticini", price: "€19,90/kg", image: "/images/arrosticini.png" },
 
   { category: "Hamburger", name: "Hamburger di pollo", price: "€14,90/kg", image: "/images/hamburger-pollo.jpg" },
   { category: "Hamburger", name: "Hamburger bovino adulto", price: "€15,90/kg", image: "/images/hamburger-bovino.jpg" },
@@ -80,6 +84,7 @@ const categories = [
   "Tacchino",
   "Manzo / Vitello",
   "Suino",
+  "Ovino",
   "Hamburger",
 ];
 
@@ -99,45 +104,70 @@ type CartItem = {
   price: string;
 };
 
+const quantityOptions = [
+  { value: "250 g", label: "250 g — circa 1-2 porzioni" },
+  { value: "500 g", label: "500 g — circa 2-3 porzioni" },
+  { value: "750 g", label: "750 g — circa 3-4 porzioni" },
+  { value: "1 kg", label: "1 kg — circa 4-5 porzioni" },
+  { value: "1,5 kg", label: "1,5 kg — circa 6-8 porzioni" },
+  { value: "2 kg", label: "2 kg — circa 8-10 porzioni" },
+  { value: "Quantità personalizzata nelle note", label: "Quantità personalizzata — scrivila nelle note" },
+];
+
+function parseUnitPrice(price: string) {
+  const match = price.match(/€([0-9]+(?:,[0-9]+)?)\/kg/);
+  return match ? Number(match[1].replace(",", ".")) : null;
+}
+
+function parseFixedPrice(price: string) {
+  if (price.includes("/kg")) return null;
+  const match = price.match(/€([0-9]+(?:,[0-9]+)?)/);
+  return match ? Number(match[1].replace(",", ".")) : null;
+}
+
+function quantityToKg(quantity: string) {
+  if (quantity.includes("personalizzata")) return null;
+  if (quantity.endsWith(" g")) return Number(quantity.replace(" g", "")) / 1000;
+  if (quantity.endsWith(" kg")) return Number(quantity.replace(" kg", "").replace(",", "."));
+  return null;
+}
+
+function estimateItemTotal(item: CartItem) {
+  const fixedPrice = parseFixedPrice(item.price);
+  if (fixedPrice !== null) return fixedPrice;
+
+  const unitPrice = parseUnitPrice(item.price);
+  const weightKg = quantityToKg(item.quantity);
+  if (unitPrice === null || weightKg === null) return null;
+
+  return unitPrice * weightKg;
+}
+
+function formatEuro(value: number) {
+  return new Intl.NumberFormat("it-IT", {
+    style: "currency",
+    currency: "EUR",
+  }).format(value);
+}
+
 export default function Home() {
   const [selectedCategory, setSelectedCategory] = useState("Tutti");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [customerName, setCustomerName] = useState("");
   const [phone, setPhone] = useState("");
-  const [deliveryMode, setDeliveryMode] = useState(
-    "Ritiro in sede - Via Roma 15, Castellanza"
-  );
+  const [deliveryMode, setDeliveryMode] = useState("Ritiro in sede");
+  const [deliveryAddress, setDeliveryAddress] = useState("");
   const [notes, setNotes] = useState("");
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [allergensAccepted, setAllergensAccepted] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
-  const [isIosInstall, setIsIosInstall] = useState(false);
 
   useEffect(() => {
-    const isStandalone =
-      window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as any).standalone === true;
-
-    const dismissed =
-      window.localStorage.getItem("macelleria-install-banner-dismissed") === "true";
-
-    const isIos =
-      /iphone|ipad|ipod/i.test(window.navigator.userAgent) &&
-      !(window.navigator as any).standalone;
-
-    if (!isStandalone && !dismissed && isIos) {
-      setIsIosInstall(true);
-      setShowInstallBanner(true);
-    }
-
     const handler = (e: any) => {
       e.preventDefault();
-
-      if (!dismissed && !isStandalone) {
-        setInstallPrompt(e);
-        setShowInstallBanner(true);
-      }
+      setInstallPrompt(e);
+      setShowInstallBanner(true);
     };
 
     window.addEventListener("beforeinstallprompt", handler);
@@ -160,19 +190,20 @@ export default function Home() {
     setCart(cart.filter((_, index) => index !== indexToRemove));
   }
 
-  function closeInstallBanner() {
-    window.localStorage.setItem("macelleria-install-banner-dismissed", "true");
-    setShowInstallBanner(false);
+  const estimatedTotal = cart.reduce((total, item) => {
+    const itemTotal = estimateItemTotal(item);
+    return total + (itemTotal ?? 0);
+  }, 0);
+
+  const hasUnpricedItems = cart.some((item) => estimateItemTotal(item) === null);
+
+  function contactButcher() {
+    const message = "Ciao! Avrei bisogno di un consiglio per scegliere quantità, taglio o preparazione del mio ordine.";
+    const url = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+    window.open(url, "_blank");
   }
 
   async function handleInstall() {
-    if (isIosInstall) {
-      alert(
-        "Su iPhone: premi il pulsante Condividi di Safari e scegli 'Aggiungi alla schermata Home'."
-      );
-      return;
-    }
-
     if (!installPrompt) return;
 
     installPrompt.prompt();
@@ -180,7 +211,6 @@ export default function Home() {
 
     if (result.outcome === "accepted") {
       setShowInstallBanner(false);
-      window.localStorage.setItem("macelleria-install-banner-dismissed", "true");
     }
   }
 
@@ -190,20 +220,35 @@ export default function Home() {
       return;
     }
 
+    if (deliveryMode === "Consegna" && !deliveryAddress.trim()) {
+      alert("Inserisci l’indirizzo per la consegna.");
+      return;
+    }
+
     if (!privacyAccepted || !allergensAccepted) {
       alert("Per inviare l’ordine devi accettare privacy e informativa allergeni.");
       return;
     }
+
+    const deliveryDetails =
+      deliveryMode === "Consegna"
+        ? `Consegna — ${deliveryAddress}`
+        : "Ritiro in sede — Via Roma 15, Castellanza";
 
     const message = `
 NUOVO ORDINE - MACELLERIA ARTIGIANA
 
 Nome: ${customerName}
 Telefono: ${phone}
-Modalità: ${deliveryMode}
+Modalità: ${deliveryDetails}
 
 Prodotti:
-${cart.map((item) => `- ${item.name} — ${item.quantity} — ${item.price}`).join("\n")}
+${cart.map((item) => {
+  const itemTotal = estimateItemTotal(item);
+  return `- ${item.name} — ${item.quantity} — ${item.price}${itemTotal !== null ? ` — stima ${formatEuro(itemTotal)}` : ""}`;
+}).join("\n")}
+
+Totale indicativo: ${formatEuro(estimatedTotal)}${hasUnpricedItems ? " + eventuali prodotti da confermare" : ""}
 
 Note:
 ${notes}
@@ -220,7 +265,17 @@ Il peso finale può variare leggermente in base al taglio reale.
   }
 
   return (
-    <main className="min-h-screen bg-neutral-950 text-white">
+    <main
+      className="min-h-screen bg-neutral-950 text-white"
+      style={{
+        backgroundImage:
+          "linear-gradient(rgba(0, 0, 0, 0.72), rgba(0, 0, 0, 0.82)), url('/images/sfondo-macelleria.png')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+        backgroundRepeat: "no-repeat",
+      }}
+    >
       {showInstallBanner && (
         <div className="fixed bottom-4 left-4 right-4 z-50 rounded-3xl border border-white/10 bg-black/95 p-5 shadow-2xl backdrop-blur">
           <div className="flex items-center justify-between gap-4">
@@ -230,15 +285,13 @@ Il peso finale può variare leggermente in base al taglio reale.
               </p>
 
               <p className="mt-1 text-xs text-neutral-400">
-                {isIosInstall
-                  ? "Su iPhone puoi aggiungerla alla schermata Home da Safari."
-                  : "Aggiungi l’app alla schermata Home per un accesso più veloce."}
+                Aggiungi l’app alla schermata Home per un accesso più veloce.
               </p>
             </div>
 
             <div className="flex shrink-0 gap-2">
               <button
-                onClick={closeInstallBanner}
+                onClick={() => setShowInstallBanner(false)}
                 className="rounded-full bg-white/10 px-4 py-2 text-xs font-bold text-white"
               >
                 Più tardi
@@ -248,14 +301,14 @@ Il peso finale può variare leggermente in base al taglio reale.
                 onClick={handleInstall}
                 className="rounded-full bg-red-700 px-4 py-2 text-xs font-bold text-white"
               >
-                {isIosInstall ? "Come fare" : "Installa"}
+                Installa
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <section className="flex min-h-screen flex-col items-center justify-center px-6 text-center">
+      <section className="flex min-h-screen flex-col items-center justify-center bg-black/20 px-6 text-center">
         <img
           src="/images/logo.png"
           alt="Macelleria Artigiana"
@@ -267,12 +320,16 @@ Il peso finale può variare leggermente in base al taglio reale.
         </p>
 
         <h1 className="max-w-4xl text-5xl font-bold leading-tight md:text-7xl">
-          Tradizione, nutrizione e innovazione su misura.
+          Non vendiamo semplicemente carne.
         </h1>
 
-        <p className="mt-6 max-w-2xl text-lg text-neutral-300">
-          Carne selezionata, box personalizzati e ordini su misura per sportivi,
-          famiglie e amanti della qualità.
+        <p className="mt-6 max-w-2xl text-xl font-medium text-neutral-200">
+          Ci prendiamo cura di ciò che porterai sulla tua tavola.
+        </p>
+
+        <p className="mt-4 max-w-2xl text-base text-neutral-400 md:text-lg">
+          Prodotti selezionati, preparazioni su misura e un macellaio a cui chiedere consiglio,
+          quando ne hai bisogno.
         </p>
 
         <div className="mt-10 flex flex-col gap-4 sm:flex-row">
@@ -324,7 +381,7 @@ Il peso finale può variare leggermente in base al taglio reale.
         </div>
       </section>
 
-      <section id="catalogo" className="px-4 py-16">
+      <section id="catalogo" className="bg-black/35 px-4 py-16 backdrop-blur-[1px]">
         <div className="mx-auto max-w-6xl">
           <h2 className="text-center text-3xl font-bold">Catalogo prodotti</h2>
 
@@ -363,26 +420,61 @@ Il peso finale può variare leggermente in base al taglio reale.
           {cart.length === 0 ? (
             <p className="mt-4 text-neutral-600">Il carrello è ancora vuoto.</p>
           ) : (
-            <div className="mt-6 space-y-3">
-              {cart.map((item, index) => (
-                <div
-                  key={`${item.name}-${index}`}
-                  className="flex items-center justify-between gap-4 rounded-2xl bg-neutral-100 p-4 font-medium"
-                >
-                  <span>
-                    {item.name} — {item.quantity} — {item.price}
-                  </span>
+            <>
+              <div className="mt-6 space-y-3">
+                {cart.map((item, index) => {
+                  const itemTotal = estimateItemTotal(item);
 
-                  <button
-                    onClick={() => removeFromCart(index)}
-                    className="rounded-full bg-red-700 px-4 py-2 text-sm font-bold text-white hover:bg-red-800"
-                  >
-                    Rimuovi
-                  </button>
-                </div>
-              ))}
-            </div>
+                  return (
+                    <div
+                      key={`${item.name}-${index}`}
+                      className="flex items-center justify-between gap-4 rounded-2xl bg-neutral-100 p-4"
+                    >
+                      <div>
+                        <p className="font-bold">{item.name}</p>
+                        <p className="mt-1 text-sm text-neutral-600">
+                          {item.quantity} — {item.price}
+                          {itemTotal !== null && ` — circa ${formatEuro(itemTotal)}`}
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => removeFromCart(index)}
+                        className="shrink-0 rounded-full bg-red-700 px-4 py-2 text-sm font-bold text-white hover:bg-red-800"
+                      >
+                        Rimuovi
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 rounded-3xl bg-neutral-950 p-6 text-white shadow-xl">
+                <p className="text-sm font-bold uppercase tracking-wider text-neutral-400">
+                  Totale provvisorio
+                </p>
+                <p className="mt-2 text-4xl font-bold">{formatEuro(estimatedTotal)}</p>
+                <p className="mt-2 text-sm text-neutral-400">
+                  {hasUnpricedItems
+                    ? "Il totale non comprende eventuali prodotti con prezzo da confermare."
+                    : "È una stima: il totale finale può variare leggermente in base al peso reale del prodotto preparato."}
+                </p>
+              </div>
+            </>
           )}
+
+          <div className="mt-8 rounded-3xl border border-green-200 bg-green-50 p-5">
+            <p className="font-bold text-neutral-950">Hai un dubbio prima di ordinare?</p>
+            <p className="mt-1 text-sm leading-6 text-neutral-700">
+              Scrivimi direttamente: ti aiuto a scegliere quantità, taglio e preparazione giusti per te.
+            </p>
+            <button
+              onClick={contactButcher}
+              className="mt-4 w-full rounded-full bg-green-600 px-6 py-3 font-bold text-white hover:bg-green-700"
+            >
+              Parla con il macellaio su WhatsApp
+            </button>
+          </div>
 
           <div className="mt-10 grid gap-4">
             <input
@@ -399,19 +491,57 @@ Il peso finale può variare leggermente in base al taglio reale.
               className="rounded-2xl border p-4"
             />
 
-            <select
-              value={deliveryMode}
-              onChange={(e) => setDeliveryMode(e.target.value)}
-              className="rounded-2xl border p-4"
-            >
-              <option>Ritiro in sede - Via Roma 15, Castellanza</option>
-              <option>Consegna concordata</option>
-            </select>
+            <div>
+              <p className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-700">
+                Come vuoi ricevere il tuo ordine?
+              </p>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("Ritiro in sede")}
+                  className={`rounded-2xl border-2 p-4 text-left transition ${
+                    deliveryMode === "Ritiro in sede"
+                      ? "border-red-700 bg-red-50"
+                      : "border-neutral-200 bg-white hover:border-neutral-400"
+                  }`}
+                >
+                  <span className="block text-lg font-bold">📍 Ritiro in sede</span>
+                  <span className="mt-1 block text-sm text-neutral-600">
+                    Via Roma 15, Castellanza
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setDeliveryMode("Consegna")}
+                  className={`rounded-2xl border-2 p-4 text-left transition ${
+                    deliveryMode === "Consegna"
+                      ? "border-red-700 bg-red-50"
+                      : "border-neutral-200 bg-white hover:border-neutral-400"
+                  }`}
+                >
+                  <span className="block text-lg font-bold">🚚 Consegna</span>
+                  <span className="mt-1 block text-sm text-neutral-600">
+                    Da concordare con il macellaio
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {deliveryMode === "Consegna" && (
+              <input
+                value={deliveryAddress}
+                onChange={(e) => setDeliveryAddress(e.target.value)}
+                placeholder="Indirizzo di consegna"
+                className="rounded-2xl border p-4"
+              />
+            )}
 
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Note: taglio, sottovuoto, orario, indirizzo, allergeni..."
+              placeholder="Note: taglio, sottovuoto, orario, allergeni..."
               className="min-h-32 rounded-2xl border p-4"
             />
 
@@ -443,7 +573,7 @@ Il peso finale può variare leggermente in base al taglio reale.
         </div>
       </section>
 
-      <section id="contatti" className="px-6 py-20">
+      <section id="contatti" className="bg-black/40 px-6 py-20 backdrop-blur-[1px]">
         <div className="mx-auto max-w-5xl">
           <p className="text-center text-sm font-bold uppercase tracking-[0.3em] text-red-500">
             Contatti
@@ -534,9 +664,12 @@ function ProductCard({
         )}
 
         {!product.description && !product.items && (
-          <p className="mt-3 hidden text-neutral-400 md:block">
-            Seleziona la quantità desiderata. Il peso finale può variare leggermente.
-          </p>
+          <div className="mt-3 rounded-2xl bg-white/5 p-3 text-xs leading-5 text-neutral-300 md:text-sm">
+            <p className="font-semibold text-white">Non sai quanto ordinare?</p>
+            <p className="mt-1">
+              Usa il riferimento alle porzioni nel menu qui sotto. Se hai dubbi, puoi chiedere consiglio al macellaio prima di inviare l’ordine.
+            </p>
+          </div>
         )}
 
         {product.fixedQuantity ? (
@@ -544,18 +677,22 @@ function ProductCard({
             {product.fixedQuantity}
           </div>
         ) : (
-          <select
-            value={quantity}
-            onChange={(e) => setQuantity(e.target.value)}
-            className="mt-4 w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white"
-          >
-            <option>250 g</option>
-            <option>500 g</option>
-            <option>1 kg</option>
-            <option>1,5 kg</option>
-            <option>2 kg</option>
-            <option>Quantità personalizzata nelle note</option>
-          </select>
+          <div className="mt-4">
+            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-neutral-400">
+              Scegli quantità
+            </label>
+            <select
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white"
+            >
+              {quantityOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
         )}
 
         <button
