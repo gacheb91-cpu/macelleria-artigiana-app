@@ -160,6 +160,8 @@ export default function Home() {
   const [notes, setNotes] = useState("");
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [allergensAccepted, setAllergensAccepted] = useState(false);
+  const [showAllergensInfo, setShowAllergensInfo] = useState(false);
+  const [showPrivacyInfo, setShowPrivacyInfo] = useState(false);
   const [installPrompt, setInstallPrompt] = useState<any>(null);
   const [showInstallBanner, setShowInstallBanner] = useState(false);
 
@@ -545,23 +547,215 @@ Il peso finale può variare leggermente in base al taglio reale.
               className="min-h-32 rounded-2xl border p-4"
             />
 
-            <label className="flex gap-3 rounded-2xl bg-neutral-100 p-4 text-sm">
-              <input
-                type="checkbox"
-                checked={allergensAccepted}
-                onChange={(e) => setAllergensAccepted(e.target.checked)}
-              />
-              <span>Ho letto l’informativa allergeni.</span>
-            </label>
+            <div className="rounded-2xl bg-neutral-100 p-4 text-sm">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={allergensAccepted}
+                  onChange={(e) => setAllergensAccepted(e.target.checked)}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <span>Ho letto l’informativa allergeni.</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllergensInfo(!showAllergensInfo)}
+                    className="mt-2 block font-bold text-red-700 underline underline-offset-2"
+                    aria-expanded={showAllergensInfo}
+                  >
+                    {showAllergensInfo ? "Chiudi informativa" : "Consulta l’informativa allergeni"}
+                  </button>
+                </div>
+              </div>
 
-            <label className="flex gap-3 rounded-2xl bg-neutral-100 p-4 text-sm">
-              <input
-                type="checkbox"
-                checked={privacyAccepted}
-                onChange={(e) => setPrivacyAccepted(e.target.checked)}
-              />
-              <span>Ho letto e accetto l’informativa privacy.</span>
-            </label>
+              {showAllergensInfo && (
+                <div className="mt-4 max-h-96 overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-5 text-sm leading-6 text-neutral-700">
+                  <h3 className="text-lg font-bold text-neutral-950">Informativa allergeni</h3>
+                  <p className="mt-3">
+                    Si comunica alla clientela che nei nostri prodotti possono essere presenti alcuni allergeni.
+                    Per qualsiasi informazione specifica è possibile consultare le informazioni e gli ingredienti
+                    riportati nell’app o presso il nostro negozio.
+                  </p>
+                  <p className="mt-3 font-semibold text-neutral-900">
+                    Si raccomanda comunque di segnalare sempre se si soffre di particolari allergie o intolleranze,
+                    certe o anche solo presunte, per avere informazioni più dettagliate a riguardo.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">
+                    Elenco degli allergeni ai sensi del Reg. UE n. 1169/2011
+                  </h4>
+
+                  <ol className="mt-3 list-decimal space-y-3 pl-5">
+                    <li>
+                      Cereali contenenti glutine (cioè grano, segale, orzo, avena, farro, kamut o i loro ceppi
+                      ibridati) e prodotti derivati, tranne:
+                      <div className="mt-2 pl-4">
+                        a) sciroppi di glucosio a base di grano, incluso destrosio, e prodotti derivati, purché il
+                        processo subito non aumenti il livello di allergenicità valutato dall’EFSA per il prodotto
+                        di base dal quale sono derivati;<br />
+                        b) maltodestrine a base di grano e prodotti derivati, purché il processo subito non aumenti
+                        il livello di allergenicità valutato dall’EFSA per il prodotto di base dal quale sono derivati;<br />
+                        c) sciroppi di glucosio a base d’orzo;<br />
+                        d) cereali utilizzati per la fabbricazione di distillati o di alcol etilico di origine agricola
+                        per liquori ed altre bevande alcoliche.
+                      </div>
+                    </li>
+                    <li>Crostacei e prodotti derivati.</li>
+                    <li>Uova e prodotti derivati.</li>
+                    <li>
+                      Pesce e prodotti derivati, tranne:
+                      <div className="mt-2 pl-4">
+                        a) gelatina di pesce utilizzata come supporto per preparati di vitamine o carotenoidi;<br />
+                        b) gelatina o colla di pesce utilizzata come chiarificante nella birra e nel vino.
+                      </div>
+                    </li>
+                    <li>Arachidi e prodotti derivati.</li>
+                    <li>
+                      Soia e prodotti derivati, tranne:
+                      <div className="mt-2 pl-4">
+                        a) olio e grasso di soia raffinato e prodotti derivati, purché il processo subito non aumenti
+                        il livello di allergenicità valutato dall’EFSA per il prodotto di base dal quale sono derivati;<br />
+                        b) tocoferoli misti naturali (E306), tocoferolo D-alfa naturale, tocoferolo acetato D-alfa
+                        naturale, tocoferolo succinato D-alfa naturale a base di soia;<br />
+                        c) oli vegetali derivati da fitosteroli e fitosteroli esteri a base di soia;<br />
+                        d) estere di stanolo vegetale prodotto da steroli di olio vegetale a base di soia.
+                      </div>
+                    </li>
+                    <li>
+                      Latte e prodotti derivati, incluso lattosio, tranne:
+                      <div className="mt-2 pl-4">
+                        a) siero di latte utilizzato per la fabbricazione di distillati o di alcol etilico di origine
+                        agricola per liquori ed altre bevande alcoliche;<br />
+                        b) lattitolo.
+                      </div>
+                    </li>
+                    <li>
+                      Frutta a guscio, cioè mandorle (Amygdalus communis L.), nocciole (Corylus avellana),
+                      noci comuni (Juglans regia), noci di anacardi (Anacardium occidentale), noci di pecan
+                      (Carya illinoiesis (Wangenh) K. Koch), noci del Brasile (Bertholletia excelsa), pistacchi
+                      (Pistacia vera), noci del Queensland (Macadamia ternifolia) e prodotti derivati, tranne
+                      frutta a guscio utilizzata per la fabbricazione di distillati o di alcol etilico di origine
+                      agricola per liquori ed altre bevande alcoliche.
+                    </li>
+                    <li>Sedano e prodotti derivati.</li>
+                    <li>Senape e prodotti derivati.</li>
+                    <li>Semi di sesamo e prodotti derivati.</li>
+                    <li>
+                      Anidride solforosa e solfiti in concentrazioni superiori a 10 mg/Kg o 10 mg/l espressi come SO2.
+                    </li>
+                    <li>Lupini e prodotti derivati.</li>
+                    <li>Molluschi e prodotti derivati.</li>
+                  </ol>
+                </div>
+              )}
+            </div>
+
+            <div className="rounded-2xl bg-neutral-100 p-4 text-sm">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  checked={privacyAccepted}
+                  onChange={(e) => setPrivacyAccepted(e.target.checked)}
+                  className="mt-1"
+                />
+                <div className="flex-1">
+                  <span>Ho letto l’informativa privacy.</span>
+                  <button
+                    type="button"
+                    onClick={() => setShowPrivacyInfo(!showPrivacyInfo)}
+                    className="mt-2 block font-bold text-red-700 underline underline-offset-2"
+                    aria-expanded={showPrivacyInfo}
+                  >
+                    {showPrivacyInfo ? "Chiudi informativa" : "Consulta l’informativa privacy"}
+                  </button>
+                </div>
+              </div>
+
+              {showPrivacyInfo && (
+                <div className="mt-4 max-h-96 overflow-y-auto rounded-2xl border border-neutral-200 bg-white p-5 text-sm leading-6 text-neutral-700">
+                  <h3 className="text-lg font-bold text-neutral-950">
+                    Informativa sul trattamento dei dati personali
+                  </h3>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    Ai sensi dell’art. 13 del Regolamento (UE) 2016/679 (GDPR)
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">1. Titolare del trattamento</h4>
+                  <p className="mt-2">
+                    Il Titolare del trattamento è <strong>Macelleria Artigiana</strong>, P. IVA 04157550122,
+                    con sede in Via Roma 15, Castellanza (VA), contattabile all’indirizzo
+                    <strong> info@macelleriaartigiana.it</strong>.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">2. Dati trattati</h4>
+                  <p className="mt-2">
+                    Attraverso l’app possono essere trattati i dati forniti volontariamente dal cliente:
+                    nome e cognome, numero di telefono, prodotti ordinati, modalità di ritiro o consegna,
+                    eventuale indirizzo di consegna e informazioni inserite nel campo note.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">3. Finalità e base giuridica</h4>
+                  <p className="mt-2">
+                    I dati sono utilizzati per ricevere, gestire e preparare l’ordine, contattare il cliente
+                    quando necessario, organizzare il ritiro o la consegna e adempiere agli eventuali obblighi
+                    amministrativi, fiscali e di legge. Il trattamento necessario alla gestione dell’ordine
+                    si basa sull’esecuzione di misure precontrattuali adottate su richiesta del cliente e
+                    sull’esecuzione del rapporto contrattuale; gli eventuali trattamenti richiesti dalla legge
+                    si basano sull’adempimento di obblighi legali.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">4. Allergie e intolleranze</h4>
+                  <p className="mt-2">
+                    Qualora il cliente comunichi volontariamente informazioni relative ad allergie,
+                    intolleranze o altre esigenze connesse alla salute, tali informazioni saranno utilizzate
+                    esclusivamente per fornire indicazioni e gestire la specifica richiesta del cliente.
+                    L’invio volontario di tali informazioni deve avvenire solo quando necessario al servizio richiesto.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">5. Modalità di invio dell’ordine</h4>
+                  <p className="mt-2">
+                    Al termine della compilazione l’app genera un messaggio che il cliente sceglie di inviare
+                    tramite WhatsApp. L’utilizzo di WhatsApp comporta quindi anche il trattamento dei dati da parte
+                    del relativo fornitore del servizio secondo le proprie condizioni e informative privacy.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">6. Conferimento dei dati</h4>
+                  <p className="mt-2">
+                    Il conferimento dei dati necessari all’ordine è indispensabile per poter gestire la richiesta.
+                    In mancanza di tali dati non sarà possibile inviare e gestire correttamente l’ordine.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">7. Destinatari dei dati</h4>
+                  <p className="mt-2">
+                    I dati possono essere trattati dal Titolare e da soggetti che forniscono servizi tecnici,
+                    amministrativi o professionali strettamente necessari alla gestione dell’attività,
+                    nei limiti delle rispettive funzioni e degli obblighi di legge.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">8. Conservazione</h4>
+                  <p className="mt-2">
+                    I dati sono conservati per il tempo necessario alla gestione dell’ordine e delle eventuali
+                    richieste collegate. I dati che devono essere conservati per obblighi amministrativi,
+                    contabili o fiscali saranno mantenuti per i periodi previsti dalla normativa applicabile.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">9. Diritti dell’interessato</h4>
+                  <p className="mt-2">
+                    Nei casi previsti dal GDPR, l’interessato può chiedere l’accesso ai propri dati personali,
+                    la rettifica, la cancellazione, la limitazione del trattamento, la portabilità dei dati
+                    e può opporsi al trattamento. Le richieste possono essere inviate a
+                    <strong> info@macelleriaartigiana.it</strong>. È inoltre possibile proporre reclamo al
+                    Garante per la protezione dei dati personali.
+                  </p>
+
+                  <h4 className="mt-5 font-bold text-neutral-950">10. Aggiornamenti</h4>
+                  <p className="mt-2">
+                    La presente informativa potrà essere aggiornata qualora cambino le modalità di trattamento
+                    dei dati o i servizi utilizzati dall’app.
+                  </p>
+                </div>
+              )}
+            </div>
 
             <button
               onClick={sendOrder}
