@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useId } from "react";
 import { supabase } from "@/lib/supabase";
 
 const WHATSAPP_NUMBER = "393513912335";
@@ -12,6 +12,8 @@ type Product = {
   price: string;
   image: string;
   description?: string;
+  ingredients?: string;
+  allergens?: string;
   fixedQuantity?: string;
   items?: string[];
   unit: string;
@@ -27,6 +29,8 @@ type CatalogRow = {
   categoria: string;
   categoria_ordinamento: number | null;
   ordinamento: number | null;
+  ingredienti?: string | string[] | null;
+  allergeni?: string | string[] | null;
 };
 
 type CartItem = {
@@ -37,6 +41,7 @@ type CartItem = {
   unit: string;
   packaging?: "carta" | "sottovuoto" | "vaschetta" | "altro";
   packageWeightGrams?: number;
+  preparation?: string;
 };
 
 const quantityOptions = [
@@ -199,6 +204,39 @@ function calculatePackageCount(
   );
 }
 
+function catalogText(value: string | string[] | null | undefined) {
+  return Array.isArray(value) ? value.join(", ") : typeof value === "string" ? value.trim() || undefined : undefined;
+}
+
+function normalizeSearch(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("it").replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function productMatchesSearch(product: Product, query: string) {
+  const name = normalizeSearch(product.name);
+  return normalizeSearch(query).split(/\s+/).filter(Boolean).every((word) => name.includes(word));
+}
+
+function chooseFeaturedProducts(products: Product[]) {
+  const text = (p: Product) => normalizeSearch(`${p.category} ${p.name}`);
+  const box = (p: Product) => /\bbox\b/.test(text(p));
+  const ready = (p: Product) => !box(p) && /pront[oi]|preparat|impanat|involtin|polpett|valdostan|spiedin|marinat/.test(text(p));
+  const groups = [
+    { label: "Manzo", matches: (p: Product) => !box(p) && !ready(p) && /manzo|bovino|scottona|tagliata|costata|fiorentina/.test(text(p)), preferred: /tagliata|scamone/ },
+    { label: "Pollo", matches: (p: Product) => !box(p) && !ready(p) && /pollo/.test(text(p)), preferred: /petto/ },
+    { label: "Pronto a cuocere", matches: ready, preferred: /involtin|polpett/ },
+    { label: "Box", matches: box, preferred: /famiglia/ },
+  ];
+  const used = new Set<string>();
+  return groups.flatMap((group) => {
+    const candidates = products.filter((p) => !used.has(p.id) && group.matches(p));
+    const product = candidates.find((p) => group.preferred.test(normalizeSearch(p.name))) || candidates[0];
+    if (!product) return [];
+    used.add(product.id);
+    return [{ label: group.label, product }];
+  });
+}
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [catalogLoading, setCatalogLoading] =
@@ -208,6 +246,8 @@ export default function Home() {
 
   const [selectedCategory, setSelectedCategory] =
     useState("Tutti");
+
+  const [searchQuery, setSearchQuery] = useState("");
 
   const [cart, setCart] = useState<CartItem[]>([]);
 
@@ -227,6 +267,8 @@ export default function Home() {
 
   const [deliveryCap, setDeliveryCap] =
     useState("");
+
+  const deliveryVerificationRun = useRef(0);
 
   const [deliveryVerificationStatus, setDeliveryVerificationStatus] =
     useState<"idle" | "checking" | "valid" | "invalid">("idle");
@@ -276,19 +318,7 @@ export default function Home() {
 
       const { data, error } = await supabase
         .from("catalogo_pubblico")
-        .select(
-          `
-            id,
-            nome,
-            descrizione,
-            prezzo,
-            unita,
-            immagine_url,
-            categoria,
-            categoria_ordinamento,
-            ordinamento
-          `
-        )
+        .select("*")
         .order("categoria_ordinamento", {
           ascending: true,
         })
@@ -332,6 +362,8 @@ export default function Home() {
             row.unita
           ),
           unit: row.unita,
+          ingredients: catalogText(row.ingredienti),
+          allergens: catalogText(row.allergeni),
         }));
 
       setProducts(mappedProducts);
@@ -372,16 +404,14 @@ export default function Home() {
     ),
   ];
 
-  const filteredProducts =
-    selectedCategory === "Tutti"
-      ? products
-      : products.filter(
-          (product) =>
-            product.category === selectedCategory
-        );
+  const filteredProducts = products.filter((product) =>
+    (selectedCategory === "Tutti" || product.category === selectedCategory) &&
+    productMatchesSearch(product, searchQuery)
+  );
+  const featuredProducts = chooseFeaturedProducts(products);
 
   function addToCart(item: CartItem) {
-    setCart([...cart, item]);
+    setCart((current) => [...current, item]);
   }
 
   function removeFromCart(
@@ -434,6 +464,7 @@ export default function Home() {
   }
 
   function invalidateDeliveryVerification() {
+    deliveryVerificationRun.current += 1;
     setDeliveryVerificationStatus("idle");
     setDeliveryVerificationMessage("");
     setDeliveryDistanceKm(null);
@@ -441,6 +472,7 @@ export default function Home() {
   }
 
   async function verifyDeliveryAddress() {
+    const run = ++deliveryVerificationRun.current;
     const street = deliveryAddress.trim();
     const city = deliveryCity.trim();
     const postalcode = deliveryCap.trim();
@@ -470,6 +502,7 @@ export default function Home() {
       );
 
       const geocodeResult = await response.json();
+      if (run !== deliveryVerificationRun.current) return;
 
       if (!response.ok || !geocodeResult?.success) {
         setDeliveryVerificationStatus("invalid");
@@ -488,6 +521,7 @@ export default function Home() {
         }
       );
 
+      if (run !== deliveryVerificationRun.current) return;
       if (error) {
         console.error(
           "Errore verifica raggio consegna:",
@@ -536,6 +570,7 @@ export default function Home() {
         );
       }
     } catch (error) {
+      if (run !== deliveryVerificationRun.current) return;
       console.error(
         "Errore durante la verifica dell'indirizzo:",
         error
@@ -621,7 +656,7 @@ export default function Home() {
               item.packageWeightGrams
             )
           : null,
-      preparazione: null,
+      preparazione: item.preparation || null,
       note: null,
     }));
 
@@ -670,7 +705,7 @@ ${cart
       itemTotal !== null
         ? ` — stima ${formatEuro(itemTotal)}`
         : ""
-    }`;
+    }${item.preparation ? `\n  Preparazione: ${item.preparation}` : ""}`;
   })
   .join("\n")}
 
@@ -838,47 +873,109 @@ Il peso finale può variare leggermente in base al taglio reale.
         </div>
       )}
 
-      <section className="flex min-h-screen flex-col items-center justify-center bg-black/20 px-6 text-center">
-        <img
-          src="/images/logo.png"
-          alt="Macelleria Artigiana"
-          className="mb-8 h-32 w-32 rounded-full object-contain"
-        />
+      <section className="bg-black/20 px-4 pb-10 pt-5 sm:px-6 md:py-8">
+        <div className="mx-auto max-w-6xl">
+          <div className="flex items-center justify-between gap-4">
+            <a href="#" aria-label="Macelleria Artigiana, inizio pagina" className="flex items-center gap-3">
+              <img src="/images/logo.png" alt="" className="h-14 w-14 object-contain md:h-20 md:w-20" />
+              <span className="text-sm font-bold uppercase tracking-wider md:text-base">Macelleria Artigiana</span>
+            </a>
+            <a href="#carrello" className="shrink-0 rounded-full border border-white/20 px-4 py-3 text-sm">Carrello ({cart.length})</a>
+          </div>
+          <div className="my-6 max-w-3xl md:my-8">
+            <h1 className="text-3xl font-bold leading-tight md:text-5xl">Non vendiamo semplicemente carne.</h1>
+            <p className="mt-3 text-base text-neutral-200 md:text-xl">Ci prendiamo cura di ciò che porterai sulla tua tavola.</p>
+          </div>
+          <form role="search" onSubmit={(event) => {event.preventDefault(); setSelectedCategory("Tutti"); document.getElementById("catalogo")?.scrollIntoView({behavior: "smooth"});}} className="mb-6 flex max-w-2xl gap-2">
+            <label htmlFor="home-search" className="sr-only">Cerca un prodotto per nome</label>
+            <input id="home-search" type="search" value={searchQuery} onChange={(event) => {setSearchQuery(event.target.value); setSelectedCategory("Tutti");}} placeholder="Cerca un prodotto, es. pollo o tagliata" className="min-w-0 flex-1 rounded-full border border-white/20 bg-neutral-900 px-4 py-3 text-sm text-white" />
+            <button type="submit" className="rounded-full bg-red-700 px-5 py-3 text-sm font-bold hover:bg-red-800">Cerca</button>
+          </form>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h2 className="text-xl font-bold">La nostra vetrina</h2>
+            <a href="#catalogo" className="py-2 text-sm font-bold text-red-400 underline">Tutti i prodotti</a>
+          </div>
+          {catalogLoading ? <p role="status" className="py-8 text-neutral-300">Caricamento prodotti…</p> : catalogError ? <p className="py-6 text-neutral-300">{catalogError}</p> : featuredProducts.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4 md:gap-4">
+              {featuredProducts.map(({label, product}) => <div key={product.id} className="flex flex-col gap-2"><p className="text-xs font-bold uppercase tracking-wider text-red-400">{label}</p><ProductCard product={product} onAdd={addToCart} /></div>)}
+            </div>
+          ) : <p className="py-6 text-neutral-300">La vetrina sarà disponibile con i prodotti del catalogo.</p>}
+        </div>
+      </section>
 
-        <p className="mb-4 text-sm uppercase tracking-[0.35em] text-red-500">
-          Macelleria Artigiana
-        </p>
+      <section
+        id="catalogo"
+        className="bg-black/35 px-4 py-16 backdrop-blur-[1px]"
+      >
+        <div className="mx-auto max-w-6xl">
+          <h2 className="text-center text-3xl font-bold">
+            Catalogo prodotti
+          </h2>
 
-        <h1 className="max-w-4xl text-5xl font-bold leading-tight md:text-7xl">
-          Non vendiamo semplicemente carne.
-        </h1>
+          {catalogLoading && (
+            <div className="mt-10 text-center text-neutral-300">
+              Caricamento catalogo...
+            </div>
+          )}
 
-        <p className="mt-6 max-w-2xl text-xl font-medium text-neutral-200">
-          Ci prendiamo cura di ciò che
-          porterai sulla tua tavola.
-        </p>
+          {catalogError && (
+            <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-red-500/30 bg-red-950/40 p-5 text-center text-red-200">
+              {catalogError}
+            </div>
+          )}
 
-        <p className="mt-4 max-w-2xl text-base text-neutral-400 md:text-lg">
-          Prodotti selezionati,
-          preparazioni su misura e un
-          macellaio a cui chiedere
-          consiglio, quando ne hai bisogno.
-        </p>
+          {!catalogLoading &&
+            !catalogError && (
+              <>
+                <div role="search" className="mx-auto mt-6 max-w-xl">
+                  <label htmlFor="catalog-search" className="mb-2 block text-sm font-bold">Cerca nel catalogo</label>
+                  <div className="flex gap-2"><input id="catalog-search" type="search" value={searchQuery} onChange={(event) => {setSearchQuery(event.target.value); setSelectedCategory("Tutti");}} placeholder="Scrivi il nome del prodotto" className="min-w-0 flex-1 rounded-full border border-white/20 bg-neutral-900 px-4 py-3 text-white" />
+                  {searchQuery && <button type="button" onClick={() => setSearchQuery("")} className="rounded-full bg-white/10 px-4 text-sm">Cancella</button>}</div>
+                  <p aria-live="polite" className="mt-2 text-sm text-neutral-400">{filteredProducts.length} {filteredProducts.length === 1 ? "prodotto trovato" : "prodotti trovati"}</p>
+                </div>
+                <div className="mt-8 flex flex-wrap justify-center gap-2">
+                  {categories.map(
+                    (category) => (
+                      <button
+                        key={category}
+                        onClick={() =>
+                          setSelectedCategory(
+                            category
+                          )
+                        }
+                        className={`rounded-full px-4 py-2 text-xs font-bold uppercase ${
+                          selectedCategory ===
+                          category
+                            ? "bg-red-700 text-white"
+                            : "bg-white/10 text-white hover:bg-white/20"
+                        }`}
+                      >
+                        {category}
+                      </button>
+                    )
+                  )}
+                </div>
 
-        <div className="mt-10 flex flex-col gap-4 sm:flex-row">
-          <a
-            href="#catalogo"
-            className="rounded-full bg-red-700 px-8 py-4 text-sm font-bold uppercase tracking-wider text-white hover:bg-red-800"
-          >
-            Ordina ora
-          </a>
-
-          <a
-            href="#contatti"
-            className="rounded-full border border-white/20 px-8 py-4 text-sm font-bold uppercase tracking-wider hover:bg-white hover:text-black"
-          >
-            Contatti
-          </a>
+                {filteredProducts.length ===
+                0 ? (
+                  <p className="mt-10 text-center text-neutral-400">
+                    Nessun prodotto trovato. Prova un altro nome o seleziona “Tutti”.
+                  </p>
+                ) : (
+                  <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-6">
+                    {filteredProducts.map(
+                      (product) => (
+                        <ProductCard
+                          key={product.id}
+                          product={product}
+                          onAdd={addToCart}
+                        />
+                      )
+                    )}
+                  </div>
+                )}
+              </>
+            )}
         </div>
       </section>
 
@@ -928,81 +1025,9 @@ Il peso finale può variare leggermente in base al taglio reale.
         </div>
       </section>
 
-      <section
-        id="catalogo"
-        className="bg-black/35 px-4 py-16 backdrop-blur-[1px]"
-      >
-        <div className="mx-auto max-w-6xl">
-          <h2 className="text-center text-3xl font-bold">
-            Catalogo prodotti
-          </h2>
-
-          {catalogLoading && (
-            <div className="mt-10 text-center text-neutral-300">
-              Caricamento catalogo...
-            </div>
-          )}
-
-          {catalogError && (
-            <div className="mx-auto mt-10 max-w-xl rounded-2xl border border-red-500/30 bg-red-950/40 p-5 text-center text-red-200">
-              {catalogError}
-            </div>
-          )}
-
-          {!catalogLoading &&
-            !catalogError && (
-              <>
-                <div className="mt-8 flex flex-wrap justify-center gap-2">
-                  {categories.map(
-                    (category) => (
-                      <button
-                        key={category}
-                        onClick={() =>
-                          setSelectedCategory(
-                            category
-                          )
-                        }
-                        className={`rounded-full px-4 py-2 text-xs font-bold uppercase ${
-                          selectedCategory ===
-                          category
-                            ? "bg-red-700 text-white"
-                            : "bg-white/10 text-white hover:bg-white/20"
-                        }`}
-                      >
-                        {category}
-                      </button>
-                    )
-                  )}
-                </div>
-
-                {filteredProducts.length ===
-                0 ? (
-                  <p className="mt-10 text-center text-neutral-400">
-                    Nessun prodotto
-                    disponibile in questa
-                    categoria.
-                  </p>
-                ) : (
-                  <div className="mt-8 grid grid-cols-2 gap-3 md:grid-cols-3 md:gap-6">
-                    {filteredProducts.map(
-                      (product) => (
-                        <ProductCard
-                          key={product.id}
-                          product={product}
-                          onAdd={addToCart}
-                        />
-                      )
-                    )}
-                  </div>
-                )}
-              </>
-            )}
-        </div>
-      </section>
-
       <section className="bg-white px-6 py-20 text-neutral-950">
         <div className="mx-auto max-w-3xl">
-          <h2 className="text-3xl font-bold">
+          <h2 id="carrello" className="scroll-mt-6 text-3xl font-bold">
             Checkout ordine
           </h2>
 
@@ -1052,6 +1077,7 @@ Il peso finale può variare leggermente in base al taglio reale.
                                 itemTotal
                               )}`}
                           </p>
+                          {item.preparation && <p className="mt-2 whitespace-pre-line text-sm text-neutral-600">Preparazione: {item.preparation}</p>}
                         </div>
 
                         <button
@@ -1955,249 +1981,104 @@ Il peso finale può variare leggermente in base al taglio reale.
   );
 }
 
-function ProductCard({
-  product,
-  onAdd,
-}: {
-  product: Product;
-  onAdd: (item: CartItem) => void;
-}) {
-  const [quantity, setQuantity] =
-    useState(
-      product.fixedQuantity || "500 g"
-    );
+function ProductCard({ product, onAdd }: { product: Product; onAdd: (item: CartItem) => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const dialogTitleId = useId();
+  const quantityId = useId();
+  const packagingId = useId();
+  const packageWeightId = useId();
+  const preparationId = useId();
+  const [open, setOpen] = useState(false);
+  const [added, setAdded] = useState(false);
+  const [quantity, setQuantity] = useState(product.fixedQuantity || "500 g");
+  const [customWeight, setCustomWeight] = useState("");
+  const [preparation, setPreparation] = useState("");
+  const [packaging, setPackaging] = useState<NonNullable<CartItem["packaging"]>>("carta");
+  const [packageWeightGrams, setPackageWeightGrams] = useState<number | "">(500);
+  const isCustom = quantity.includes("personalizzata");
+  const numericWeight = Number(customWeight.replace(",", "."));
+  const validQuantity = !isCustom || (Number.isFinite(numericWeight) && numericWeight > 0);
+  const selectedQuantity = isCustom ? `${numericWeight} kg` : quantity;
+  const estimatedPrice = validQuantity ? estimateItemTotal({productId: product.id, name: product.name, quantity: selectedQuantity, price: product.price, unit: product.unit}) : null;
 
-  const [added, setAdded] =
-    useState(false);
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previous; };
+  }, [open]);
 
-  const [packaging, setPackaging] =
-    useState<
-      "carta" | "sottovuoto" | "vaschetta" | "altro"
-    >("carta");
+  useEffect(() => {
+    if (!added) return;
+    const timer = window.setTimeout(() => setAdded(false), 1800);
+    return () => window.clearTimeout(timer);
+  }, [added]);
 
-  const [packageWeightGrams, setPackageWeightGrams] =
-    useState<number | "">(500);
-
-
-  function handleAdd() {
+  function openProduct() { dialog.current?.showModal(); setOpen(true); }
+  function closeProduct() { dialog.current?.close(); setOpen(false); trigger.current?.focus(); }
+  function handleImageError(event: React.SyntheticEvent<HTMLImageElement>) {
+    if (!event.currentTarget.src.endsWith("/images/logo.png")) event.currentTarget.src = "/images/logo.png";
+  }
+  function handleAdd(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!validQuantity) return;
     onAdd({
-      productId: product.id,
-      name: product.name,
-      quantity,
-      price: product.price,
-      unit: product.unit,
-      packaging:
-        product.unit === "kg"
-          ? packaging
-          : undefined,
-      packageWeightGrams:
-        product.unit === "kg" &&
-        packageWeightGrams !== ""
-          ? packageWeightGrams
-          : undefined,
+      productId: product.id, name: product.name, quantity: selectedQuantity,
+      price: product.price, unit: product.unit,
+      preparation: preparation.trim() || undefined,
+      packaging: product.unit === "kg" ? packaging : undefined,
+      packageWeightGrams: product.unit === "kg" && packageWeightGrams !== "" ? packageWeightGrams : undefined,
     });
-
-    setAdded(true);
-
-    setTimeout(() => {
-      setAdded(false);
-    }, 1500);
+    setAdded(true); closeProduct(); setPreparation("");
   }
 
-  return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/5">
-      <div className="flex h-36 items-center justify-center bg-neutral-900 p-2 md:h-56 md:p-4">
-        <img
-          src={product.image}
-          alt={product.name}
-          onError={(event) => {
-            event.currentTarget.src =
-              "/images/logo.png";
-          }}
-          className="max-h-full max-w-full object-contain"
-        />
+  return <>
+    <article className="flex flex-1 flex-col overflow-hidden rounded-2xl border border-white/10 bg-neutral-900/80">
+      <button type="button" tabIndex={-1} aria-label={`Apri ${product.name}`} onClick={openProduct} className="flex h-28 w-full items-center justify-center bg-neutral-900 p-2 md:h-40">
+        <img src={product.image} alt={product.name} loading="lazy" onError={handleImageError} className="max-h-full max-w-full object-contain" />
+      </button>
+      <div className="flex flex-1 flex-col p-3 md:p-4">
+        <h3 className="text-sm font-bold leading-5 md:text-base">{product.name}</h3>
+        <p className="mb-3 mt-2 text-sm font-medium text-red-400">{product.price}</p>
+        <button ref={trigger} type="button" aria-haspopup="dialog" aria-label={`Personalizza ${product.name}`} onClick={openProduct} className="mt-auto min-h-11 w-full rounded-full bg-red-700 px-2 py-3 text-xs font-bold text-white hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white md:text-sm"><span aria-live="polite">{added ? "Aggiunto ✓" : "Personalizza"}</span></button>
       </div>
-
-      <div className="p-3 md:p-6">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-red-400 md:text-xs">
-          {product.category}
-        </p>
-
-        <h3 className="mt-2 text-base font-bold md:text-2xl">
-          {product.name}
-        </h3>
-
-        <p className="mt-1 text-sm text-red-400 md:text-base">
-          {product.price}
-        </p>
-
-        {product.description && (
-          <p className="mt-3 text-xs leading-5 text-neutral-400 md:text-sm">
-            {product.description}
-          </p>
-        )}
-
-        {product.items && (
-          <ul className="mt-3 space-y-1 text-xs leading-5 text-neutral-300 md:text-sm">
-            {product.items.map(
-              (item) => (
-                <li key={item}>
-                  • {item}
-                </li>
-              )
-            )}
-          </ul>
-        )}
-
-        {!product.description &&
-          !product.items &&
-          !product.fixedQuantity && (
-            <div className="mt-3 rounded-2xl bg-white/5 p-3 text-xs leading-5 text-neutral-300 md:text-sm">
-              <p className="font-semibold text-white">
-                Non sai quanto ordinare?
-              </p>
-
-              <p className="mt-1">
-                Usa il riferimento alle
-                porzioni nel menu qui sotto.
-                Se hai dubbi, puoi chiedere
-                consiglio al macellaio prima
-                di inviare l’ordine.
-              </p>
-            </div>
-          )}
-
-        {product.fixedQuantity ? (
-          <div className="mt-4 rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white">
-            {product.fixedQuantity}
-          </div>
-        ) : (
-          <div className="mt-4">
-            <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-neutral-400">
-              Scegli quantità
-            </label>
-
-            <select
-              value={quantity}
-              onChange={(e) =>
-                setQuantity(
-                  e.target.value
-                )
-              }
-              className="w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white"
-            >
-              {quantityOptions.map(
-                (option) => (
-                  <option
-                    key={option.value}
-                    value={option.value}
-                  >
-                    {option.label}
-                  </option>
-                )
-              )}
-            </select>
-
-            {product.unit === "kg" && (
-              <div className="mt-4 grid gap-3">
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-neutral-400">
-                    Confezionamento
-                  </label>
-
-                  <select
-                    value={packaging}
-                    onChange={(e) =>
-                      setPackaging(
-                        e.target.value as
-                          | "carta"
-                          | "sottovuoto"
-                          | "vaschetta"
-                          | "altro"
-                      )
-                    }
-                    className="w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white"
-                  >
-                    {packagingOptions.map(
-                      (option) => (
-                        <option
-                          key={option.value}
-                          value={option.value}
-                        >
-                          {option.label}
-                        </option>
-                      )
-                    )}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-neutral-400">
-                    Peso desiderato per confezione
-                  </label>
-
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number"
-                      min={1}
-                      max={1000}
-                      step={1}
-                      value={packageWeightGrams}
-                      onFocus={(e) => e.currentTarget.select()}
-                      onChange={(e) => {
-                        const rawValue = e.target.value;
-
-                        if (rawValue === "") {
-                          setPackageWeightGrams("");
-                          return;
-                        }
-
-                        const value = Number(rawValue);
-
-                        if (Number.isFinite(value)) {
-                          setPackageWeightGrams(
-                            Math.min(
-                              1000,
-                              Math.max(1, value)
-                            )
-                          );
-                        }
-                      }}
-                      onBlur={() => {
-                        if (packageWeightGrams === "") {
-                          setPackageWeightGrams(500);
-                        }
-                      }}
-                      className="w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white"
-                    />
-
-                    <span className="text-sm text-neutral-300">
-                      g
-                    </span>
-                  </div>
-
-                  <p className="mt-2 text-xs leading-5 text-neutral-400">
-                    Il numero di confezioni viene calcolato automaticamente in base alla quantità totale scelta.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        <button
-          onClick={handleAdd}
-          className={`mt-4 w-full rounded-full px-3 py-3 text-xs font-bold uppercase transition md:text-sm ${
-            added
-              ? "bg-green-600 text-white"
-              : "bg-red-700 text-white hover:bg-red-800"
-          }`}
-        >
-          {added
-            ? "Aggiunto ✓"
-            : "Aggiungi"}
-        </button>
+    </article>
+    <dialog ref={dialog} aria-labelledby={dialogTitleId} onCancel={(event) => {event.preventDefault(); closeProduct();}} onClose={() => setOpen(false)} onClick={(event) => {
+      if (event.target === event.currentTarget) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeProduct();
+      }
+    }} className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%-1rem)] max-w-xl overflow-y-auto rounded-3xl border border-white/15 bg-neutral-950 p-0 text-white shadow-2xl backdrop:bg-black/80">
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-white/10 bg-neutral-950 p-4">
+        <h2 id={dialogTitleId} className="text-lg font-bold">{product.name}</h2>
+        <button type="button" autoFocus onClick={closeProduct} className="min-h-11 shrink-0 rounded-full bg-white/10 px-4 text-sm" aria-label="Chiudi scheda prodotto">Chiudi</button>
       </div>
-    </div>
-  );
+      <form onSubmit={handleAdd} className="space-y-5 p-4 md:p-6">
+        <img src={product.image} alt={product.name} loading="lazy" onError={handleImageError} className="h-44 w-full rounded-xl bg-neutral-900 object-contain" />
+        <div><p className="text-xs font-bold uppercase tracking-wider text-red-400">{product.category}</p><p className="mt-2 text-lg font-bold">{product.price}</p></div>
+        {product.description && <section><h3 className="font-bold">Descrizione</h3><p className="mt-2 whitespace-pre-line text-sm leading-6 text-neutral-300">{product.description}</p></section>}
+        {product.items && <ul className="list-inside list-disc text-sm text-neutral-300">{product.items.map(item => <li key={item}>{item}</li>)}</ul>}
+        <section className="rounded-2xl bg-white/5 p-4">
+          <h3 className="font-bold">Ingredienti e allergeni</h3>
+          {product.ingredients && <p className="mt-2 whitespace-pre-line text-sm text-neutral-300"><strong>Ingredienti: </strong>{product.ingredients}</p>}
+          {product.allergens && <p className="mt-2 whitespace-pre-line text-sm text-neutral-300"><strong>Allergeni: </strong>{product.allergens}</p>}
+          {(!product.ingredients || !product.allergens) && <p className="mt-2 text-sm leading-6 text-neutral-300">Consulta anche la descrizione. Per informazioni non indicate, chiedi conferma al macellaio prima di ordinare.</p>}
+          <a href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(`Ciao, vorrei informazioni su ingredienti e allergeni di ${product.name}.`)}`} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block py-2 text-sm font-bold text-red-400 underline">Chiedi al macellaio</a>
+        </section>
+        <div>
+          <label htmlFor={quantityId} className="mb-2 block text-sm font-bold">Scegli quantità</label>
+          {product.fixedQuantity ? <p>{product.fixedQuantity}</p> : <select id={quantityId} value={quantity} onChange={event => setQuantity(event.target.value)} className="w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white">{quantityOptions.map(option => <option key={option.value} value={option.value}>{option.value.includes("personalizzata") ? "Altro peso — inserisci i kg" : option.label}</option>)}</select>}
+          {isCustom && <label className="mt-4 block text-sm font-bold">Peso totale in kg<input type="number" required min="0.001" step="0.001" inputMode="decimal" value={customWeight} onChange={event => setCustomWeight(event.target.value)} placeholder="Es. 1,25" className="mt-2 w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-white" /></label>}
+        </div>
+        {product.unit === "kg" && <>
+          <div><label htmlFor={packagingId} className="mb-2 block text-sm font-bold">Confezionamento</label><select id={packagingId} value={packaging} onChange={event => setPackaging(event.target.value as NonNullable<CartItem["packaging"]>)} className="w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white">{packagingOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+          <div><label htmlFor={packageWeightId} className="mb-2 block text-sm font-bold">Peso desiderato per confezione</label><div className="flex items-center gap-2"><input id={packageWeightId} type="number" min={1} max={1000} step={1} value={packageWeightGrams} onFocus={event => event.currentTarget.select()} onChange={event => {const raw = event.target.value; setPackageWeightGrams(raw === "" ? "" : Number(raw));}} onBlur={() => {if (packageWeightGrams === "") setPackageWeightGrams(500);}} className="min-w-0 flex-1 rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm text-white" /><span className="text-sm text-neutral-300">g</span></div><p className="mt-2 text-xs leading-5 text-neutral-400">Il numero di confezioni viene calcolato in base alla quantità totale scelta.</p></div>
+        </>}
+        <div><label htmlFor={preparationId} className="mb-2 block text-sm font-bold">Taglio e richieste di preparazione</label><textarea id={preparationId} value={preparation} onChange={event => setPreparation(event.target.value)} maxLength={600} rows={3} placeholder="Es. fettine sottili, cubetti per spezzatino…" className="w-full rounded-2xl border border-white/20 bg-neutral-900 p-3 text-sm" /><p className="mt-2 text-xs text-neutral-400">Le richieste saranno confermate dal macellaio.</p></div>
+        <div><p aria-live="polite" className="text-lg font-bold">{estimatedPrice !== null ? `Totale indicativo: ${formatEuro(estimatedPrice)}` : "Importo da confermare"}</p><p className="mt-1 text-xs text-neutral-400">Il prezzo finale dipende dal peso effettivo e dalle richieste concordate.</p></div>
+        <button type="submit" disabled={!validQuantity} className="w-full rounded-full bg-red-700 px-3 py-3 text-sm font-bold uppercase text-white hover:bg-red-800 disabled:opacity-40">Aggiungi al carrello</button>
+      </form>
+    </dialog>
+  </>;
 }
