@@ -1,0 +1,66 @@
+MACELLERIA ARTIGIANA — AGGIORNAMENTO REFERRAL
+
+ORDINE DI INSTALLAZIONE
+1. Conserva una copia dei progetti attuali.
+2. In Supabase > SQL Editor incolla 01_referral.sql, esegui una sola volta.
+   Lo script è una transazione: un errore annulla tutte le modifiche di questa esecuzione.
+   Non sostituisce né elimina crea_ordine_pubblico: aggiunge crea_ordine_pubblico_referral.
+   Se compare "relation already exists", non cancellare tabelle: verifica se lo script era già stato installato.
+3. Estrai e aggiorna prima MA Manager, poi l'app clienti con i rispettivi progetti.
+   Mantieni i tuoi file .env.local e le variabili già configurate sul servizio di hosting.
+   .env*, node_modules, .next e .git sono esclusi dagli ZIP.
+4. In ciascun progetto esegui npm ci e npm run build; quindi pubblica con il metodo già usato.
+5. Il profilo Supabase di chi gestisce referral e importi deve essere attivo e avere
+   ruolo amministratore nella propria azienda. La nuova gestione non è esposta ai collaboratori.
+   Se il tuo profilo ha un altro ruolo, verifica prima questo punto con chi amministra Supabase.
+
+USO
+MA Manager > Partner e referral: inserisci nome partner, codice (3–32 caratteri A-Z, numeri,
+trattino o underscore) e percentuale. Lo stesso nome consente più codici/sedi con un riepilogo unico.
+Le modifiche percentuali valgono per i nuovi ordini. Disattiva un codice per cessare una
+collaborazione. È eliminabile solo se mai usato. Gli ordini precedenti restano nello storico.
+
+Il cliente può verificare e inserire un codice prima di inviare l'ordine. La verifica
+viene ripetuta nel database durante il salvataggio; non concede uno sconto.
+Per ordini inseriti manualmente, apri il dettaglio e associa il codice prima del completamento.
+Un codice già associato non è sostituibile dall'interfaccia, per preservare l'attribuzione.
+
+Quando l'ordine è pronto, conferma il totale prodotti IVA inclusa, dopo eventuali sconti
+ed effettiva pesatura, inserisci a parte la consegna e conferma che il cliente ha pagato.
+La commissione si arrotonda ai centesimi per ordine. Esempio: prodotti 50, consegna 5,
+percentuale 5%: totale cliente 55, commissione 2,50.
+La conferma rende l'ordine completato. Prima della chiusura mensile puoi correggere gli importi.
+Gli ordini pronti non ancora pagati restano pronti: non maturano commissioni.
+
+MESE E STAMPA
+Scegli mese e partner. Utilizzi = data di associazione del codice; maturato = data di conferma
+pagamento, con fuso Europe/Rome. Un ordine di settembre pagato in ottobre matura in ottobre.
+Il nuovo mese parte automaticamente con un nuovo conteggio; non viene cancellato lo storico.
+"Stampa / Salva PDF" apre la stampa del browser: non modifica dati.
+"Chiudi mese" è disponibile per un singolo partner e solo per mesi terminati.
+Blocca le commissioni contabilizzate e consente di ristampare. "Segna commissioni pagate"
+registra il pagamento al partner: non esegue bonifici o altre transazioni finanziarie.
+
+ANNULLAMENTI E LIMITI
+Annullamenti/riaperture prima della chiusura escludono l'ordine dal maturato.
+Un rimborso parziale prima della chiusura può essere rappresentato correggendo il totale finale.
+Dopo la chiusura gli importi e gli annullamenti sono bloccati: questa versione non include
+una procedura di rettifica dei periodi chiusi. Non cancellare i dati per effettuare rettifiche.
+Gli ordini storici non ricevono automaticamente un referral o una commissione retroattiva.
+Il prospetto interno non è un documento fiscale né viene inviato automaticamente ai partner.
+
+VERIFICA PRIMA DELL'USO REALE
+Crea un codice di prova, registra un ordine, portalo a pronto, conferma 50 euro prodotti,
+5 euro consegna e pagamento con percentuale 5. Controlla 2,50 euro nel riepilogo.
+Prova anche un ordine senza codice. Poi disattiva il codice di prova.
+
+CONTROLLI ESEGUITI
+Controllo TypeScript delle due app (dipendenze Next 16.3.3 disponibili nell'ambiente).
+18 verifiche su PostgreSQL locale PGlite con schema di prova ricavato dal file fornito:
+accessi anonimi vietati ai dati, verifica pubblica codice, ordine atomico, codice non valido,
+percentuale storica, consegna esclusa, pagamento obbligatorio, conferme ripetute, annullamento,
+codice disattivo, eliminazione vietata se usato, chiusura e pagamento mensile, blocco modifiche,
+associazione manuale, accesso non amministratore negato.
+Non eseguiti: migrazione sul database reale, build di produzione con le dipendenze esatte
+dell'app cliente (Next 16.2.6), prova browser autenticata e pubblicazione.
+Eventuali trigger personalizzati già presenti in Supabase non erano inclusi nell'export fornito.

@@ -289,6 +289,8 @@ export default function Home() {
     useState("");
 
   const [notes, setNotes] = useState("");
+  const [referralCode, setReferralCode] = useState("");
+  const [referralMessage, setReferralMessage] = useState("");
 
   const [privacyAccepted, setPrivacyAccepted] =
     useState(false);
@@ -684,6 +686,7 @@ NUOVO ORDINE - MACELLERIA ARTIGIANA
 Nome: ${customerName}
 Telefono: ${phone}
 Modalità: ${deliveryDetails}
+${referralCode.trim() ? `Codice partner: ${referralCode.trim().toUpperCase()}` : ""}
 
 Prodotti:
 ${cart
@@ -731,7 +734,7 @@ Il peso finale può variare leggermente in base al taglio reale.
 
     try {
       const { data, error } = await supabase.rpc(
-        "crea_ordine_pubblico",
+        "crea_ordine_pubblico_referral",
         {
           p_nome: customerName.trim(),
           p_cognome: "",
@@ -757,6 +760,7 @@ Il peso finale può variare leggermente in base al taglio reale.
           p_ora_consegna: deliveryTime,
           p_note: notes.trim() || null,
           p_righe: righe,
+          p_codice_referral: referralCode.trim().toUpperCase() || null,
         }
       );
 
@@ -767,7 +771,7 @@ Il peso finale può variare leggermente in base al taglio reale.
         );
         whatsappWindow?.close();
         alert(
-          "Non è stato possibile registrare l’ordine. Riprova tra poco."
+          referralCode.trim() ? "Ordine non registrato. Controlla il codice partner o riprova tra poco." : "Non è stato possibile registrare l’ordine. Riprova tra poco."
         );
         return;
       }
@@ -806,6 +810,8 @@ Il peso finale può variare leggermente in base al taglio reale.
 
       setCart([]);
       setNotes("");
+      setReferralCode("");
+      setReferralMessage("");
       setDeliveryDate("");
       setDeliveryTime("");
       setDeliveryAddress("");
@@ -1344,6 +1350,21 @@ Il peso finale può variare leggermente in base al taglio reale.
               </div>
             )}
 
+            <div className="rounded-2xl border p-4">
+              <label htmlFor="referral" className="font-semibold">Codice partner (facoltativo)</label>
+              <input id="referral" maxLength={32} value={referralCode} autoCapitalize="characters"
+                onChange={e => {setReferralCode(e.target.value.toUpperCase()); setReferralMessage("");}}
+                placeholder="Inserisci il codice del tuo partner"
+                className="mt-2 w-full rounded-xl border p-3" />
+              <p className="mt-2 text-sm">Il codice identifica chi ti ha consigliato Macelleria Artigiana e non modifica il prezzo.</p>
+              <button type="button" className="mt-2 underline" onClick={async () => {
+                if (!referralCode.trim()) {setReferralMessage("Inserisci un codice."); return;}
+                const code = referralCode.trim();
+                const {data,error} = await supabase.rpc("ma_referral_verifica", {p_codice:code});
+                setReferralMessage(error ? "Verifica non disponibile. Riprova." : data ? `Codice ${code}: valido.` : `Codice ${code}: non valido o disattivato.`);
+              }}>Verifica codice</button>
+              <p role="status" className="mt-2 text-sm">{referralMessage}</p>
+            </div>
             <textarea
               value={notes}
               onChange={(e) =>
